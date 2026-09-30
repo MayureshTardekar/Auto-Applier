@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Sessions & Credentials
+cookies*.json
+cookies/
+.brave-session/
+.env
+
+# Personal Resume
+Resume.pdf
+
+# Application State & Data
+data/
+logs/
+
+# OS and Temp files
+.DS_Store
+Thumbs.db
+*.tmp

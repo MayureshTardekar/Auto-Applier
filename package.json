@@ -1,0 +1,24 @@
+{
+  "name": "automation",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "login": "node scripts/login.js",
+    "login:naukri": "node scripts/login.js",
+    "login:instahyre": "node scripts/loginInstahyre.js",
+    "apply": "node index.js --platform=naukri",
+    "apply:naukri": "node index.js --platform=naukri",
+    "apply:instahyre": "node index.js --platform=instahyre",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^18.0.4",
+    "puppeteer": "^25.12.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
