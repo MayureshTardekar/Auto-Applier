@@ -22,7 +22,7 @@ class WellfoundService {
         timeout: 30000,
       });
 
-      await randomDelay(2500, 3500);
+      await randomDelay(2000, 3000);
       const currentUrl = page.url();
 
       if (currentUrl.includes('/login') || currentUrl.includes('/join')) {
@@ -75,59 +75,32 @@ class WellfoundService {
 
       const rawJobs = await page.evaluate(() => {
         const jobs = [];
-        // Wellfound listing cards and job rows
-        const cards = document.querySelectorAll(
-          '[data-test="JobListItem"], .styles_jobListing__container, [class*="JobListing"], [class*="styles_result"]'
-        );
+        const seenUrls = new Set();
+        const links = Array.from(document.querySelectorAll('a[href*="/jobs/"]'));
 
-        cards.forEach((card, idx) => {
-          const titleEl = card.querySelector('a[href*="/jobs/"], [data-test="job-title"], h2, h3, .title');
-          const companyEl = card.querySelector('a[href*="/company/"], [data-test="startup-name"], h4, .company-name');
-          const applyBtn = Array.from(card.querySelectorAll('button, a')).find((b) => {
-            const txt = (b.innerText || '').trim().toLowerCase();
-            return txt === 'apply' || txt.includes('quick apply');
-          });
+        links.forEach((a) => {
+          const href = a.href;
+          // Matches individual job detail pages like /jobs/3976865-full-stack-engineer...
+          const match = href.match(/\/jobs\/(\d+)-?([a-z0-9-]+)?/i);
+          if (match && !seenUrls.has(href)) {
+            seenUrls.add(href);
+            const jobId = match[1];
+            const textLines = (a.innerText || '').split('\n').map((s) => s.trim()).filter(Boolean);
+            const title = textLines[0] || (match[2] ? match[2].replace(/-/g, ' ') : 'Software Engineer');
 
-          const title = (titleEl?.innerText || '').trim();
-          const company = (companyEl?.innerText || '').trim();
-          const url = titleEl?.href || '';
-          const id = url ? (url.match(/jobs\/(\d+)/)?.[1] || url) : `wf_${company}_${idx}`;
+            // Find company name in parent card
+            const card = a.closest('div[class*="styles_job"], div[class*="JobListing"], [data-test="JobListItem"]') || a.parentElement;
+            const companyLink = card ? card.querySelector('a[href*="/company/"]') : null;
+            const company = (companyLink?.innerText || '').split('\n')[0].trim() || 'Tech Startup';
 
-          if (title && applyBtn) {
-            applyBtn.setAttribute('data-wf-target', id);
             jobs.push({
-              jobId: id,
+              jobId,
               title,
               company,
-              url,
-              buttonSelector: `[data-wf-target="${id}"]`,
+              url: href,
             });
           }
         });
-
-        // Fallback if specific cards not found: scan all direct Apply buttons
-        if (jobs.length === 0) {
-          const buttons = Array.from(document.querySelectorAll('button'));
-          buttons.forEach((btn, idx) => {
-            const txt = (btn.innerText || '').trim().toLowerCase();
-            if (txt === 'apply' || txt.includes('quick apply')) {
-              const row = btn.closest('div[class*="styles_job"], tr, li, div') || btn.parentElement;
-              const text = (row?.innerText || '').split('\n').filter(Boolean);
-              const title = text[0] || 'Software Engineer';
-              const company = text[1] || 'Tech Startup';
-              const id = `wf_btn_${idx}`;
-
-              btn.setAttribute('data-wf-target', id);
-              jobs.push({
-                jobId: id,
-                title,
-                company,
-                url: '',
-                buttonSelector: `[data-wf-target="${id}"]`,
-              });
-            }
-          });
-        }
 
         return jobs;
       });
@@ -163,29 +136,61 @@ class WellfoundService {
   }
 
   async applyToJob(page, job) {
-    logger.info(`Applying on Wellfound: "${job.title}" at ${job.company}`);
+    logger.info(`Opening job: "${job.title}" at ${job.company}`);
 
     try {
-      // 1. Click the in-page Apply button
-      await page.evaluate((sel) => {
-        const el = document.querySelector(sel);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.click();
+      await page.goto(job.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+
+      await randomDelay(2500, 4000);
+      await humanScroll(page);
+
+      // 1. Check if already applied
+      const alreadyApplied = await page.evaluate(() => {
+        const text = document.body.innerText.toLowerCase();
+        return text.includes('you applied') || text.includes('applied on') || text.includes('application submitted');
+      });
+
+      if (alreadyApplied) {
+        logger.skip('Already applied according to page status', job.title);
+        this.storage.recordApplied(job.jobId, job);
+        return { status: 'SKIPPED', reason: 'already_applied' };
+      }
+
+      // 2. Click Apply button on job page
+      const applyBtnClicked = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, a'));
+        const applyBtn = btns.find((b) => {
+          const txt = (b.innerText || '').trim().toLowerCase();
+          return txt === 'apply' || txt === 'apply now';
+        });
+        if (applyBtn) {
+          applyBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          applyBtn.click();
+          return true;
         }
-      }, job.buttonSelector);
+        return false;
+      });
 
-      await randomDelay(2000, 3500);
+      if (!applyBtnClicked) {
+        logger.warn(`No Apply button found for ${job.title}`);
+        this.storage.recordSkipped(job.jobId, job, 'no_apply_button');
+        return { status: 'SKIPPED', reason: 'no_apply_button' };
+      }
 
-      // 2. Check if pitch note modal opened
+      await randomDelay(2500, 4000);
+
+      // 3. Check if pitch note modal opened and fill it
       const noteInputPresent = await page.evaluate((pitchText) => {
-        const textarea = document.querySelector(
-          'textarea[name*="note"], textarea[placeholder*="note"], textarea[placeholder*="message"], textarea'
-        );
-        if (textarea) {
-          textarea.value = pitchText;
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        const textareas = Array.from(document.querySelectorAll('textarea'));
+        if (textareas.length > 0) {
+          textareas.forEach((t) => {
+            t.value = pitchText;
+            t.dispatchEvent(new Event('input', { bubbles: true }));
+            t.dispatchEvent(new Event('change', { bubbles: true }));
+          });
           return true;
         }
         return false;
@@ -194,24 +199,23 @@ class WellfoundService {
       if (noteInputPresent) {
         logger.info('Inserted personalized recruiter pitch note.');
         await randomDelay(1200, 2000);
-
-        // Click Send application / Submit button in modal
-        await page.evaluate(() => {
-          const buttons = Array.from(document.querySelectorAll('button[type="submit"], [class*="modal"] button, button'));
-          const submitBtn = buttons.find((b) => {
-            const txt = (b.innerText || '').trim().toLowerCase();
-            return (
-              txt.includes('send application') ||
-              txt.includes('submit application') ||
-              txt.includes('send') ||
-              txt.includes('apply')
-            );
-          });
-          if (submitBtn) submitBtn.click();
-        });
-
-        await randomDelay(2000, 3500);
       }
+
+      // 4. Click Send application
+      await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const submitBtn = buttons.find((b) => {
+          const txt = (b.innerText || '').trim().toLowerCase();
+          return (
+            txt.includes('send application') ||
+            txt.includes('submit application') ||
+            txt === 'send'
+          );
+        });
+        if (submitBtn) submitBtn.click();
+      });
+
+      await randomDelay(2500, 4000);
 
       logger.success(`Successfully applied on Wellfound: ${job.title} at ${job.company}`);
       this.storage.recordApplied(job.jobId, job);
