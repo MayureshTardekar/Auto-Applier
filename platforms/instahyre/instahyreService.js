@@ -30,19 +30,10 @@ class InstahyreService {
         return false;
       }
 
-      // Check for candidate navigation or opportunities container
-      const isAuthenticated = await page.evaluate(() => {
-        const text = document.body.innerText.toLowerCase();
-        const hasCandidateElements = Boolean(
-          document.querySelector('#candidate-navbar') ||
-          document.querySelector('.candidate-name') ||
-          document.querySelector('a[href*="/candidate/"]') ||
-          document.querySelector('#opportunities') ||
-          document.querySelector('.opportunity-card') ||
-          document.querySelector('.profile-dropdown')
-        );
-        return hasCandidateElements || text.includes('opportunities') || text.includes('my applications');
-      });
+      const title = await page.title();
+      if (title.toLowerCase().includes('opportunities')) {
+        return true;
+      }
 
       return isAuthenticated;
     } catch (err) {

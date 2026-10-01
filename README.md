@@ -76,6 +76,25 @@ npm run apply:instahyre
 
 ---
 
+### Platform 3: Wellfound (AngelList)
+
+#### Step A: Export Cookies (One-Time)
+1. In your Brave/Chrome browser, open your logged-in **Wellfound** tab (`https://wellfound.com/jobs`).
+2. Using **Cookie-Editor**, click **Export** $\rightarrow$ **Export as JSON**.
+3. Create/paste into `cookies_wellfound.json` in the project root.
+*(Alternatively, run `npm run login:wellfound`).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:wellfound
+```
+- Scrapes active startup job listings for AI, Backend, Java, Python, and Data roles.
+- Filters listings against your whitelist and blacklist.
+- Injects a personalized founder/recruiter pitch note with your SPIT MCA & project credentials.
+- Submits applications and records them in `data/applied_wellfound.json`.
+
+---
+
 ## 🛠️ Customization Guide
 
 ### Targeted Roles & Keywords

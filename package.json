@@ -6,9 +6,11 @@
     "login": "node scripts/login.js",
     "login:naukri": "node scripts/login.js",
     "login:instahyre": "node scripts/loginInstahyre.js",
+    "login:wellfound": "node scripts/loginWellfound.js",
     "apply": "node index.js --platform=naukri",
     "apply:naukri": "node index.js --platform=naukri",
     "apply:instahyre": "node index.js --platform=instahyre",
+    "apply:wellfound": "node index.js --platform=wellfound",
     "start": "node index.js"
   },
   "keywords": [],
