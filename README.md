@@ -1,10 +1,20 @@
 # Auto-Applier 🚀
 
-A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri** and **Instahyre**.
+A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri**, **Wellfound (AngelList)**, and **Instahyre**.
 
 ---
 
-## ⚡ Quickstart
+## ⚡ Quick Command Cheat Sheet
+
+| Platform | Apply Command | Login / Setup Command | Database Output |
+| :--- | :--- | :--- | :--- |
+| **Naukri** | `npm run apply:naukri` *(or `npm run apply`)* | `npm run login:naukri` | `data/applied_jobs.json` |
+| **Wellfound** | `npm run apply:wellfound` | `npm run login:wellfound` | `data/applied_wellfound.json` |
+| **Instahyre** | `npm run apply:instahyre` | `npm run login:instahyre` | `data/applied_instahyre.json` |
+
+---
+
+## 🚀 Getting Started
 
 ### 1. Installation
 Clone the repository and install dependencies:
@@ -16,13 +26,13 @@ npm install
 ```
 
 ### 2. Configure Environment
-Copy the `.env.example` file to create your `.env`:
+Copy `.env.example` to create your local `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Ensure your `.env` contains your target details:
+Set your browser path and application preferences:
 ```env
 HEADLESS=false
 BROWSER_EXECUTABLE_PATH=C:\Users\YOUR_USERNAME\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe
@@ -36,13 +46,13 @@ Place your resume as `Resume.pdf` in the project root directory.
 
 ---
 
-## 🎯 Platform Usage
+## 🎯 Platform Setup & Usage
 
-### Platform 1: Naukri
+### 1. Naukri
 
 #### Step A: Export Cookies (One-Time)
-1. In your regular Brave/Chrome browser, open your logged-in **Naukri** tab.
-2. Using the **Cookie-Editor** extension, click **Export** $\rightarrow$ **Export as JSON**.
+1. Open your logged-in **Naukri** tab in Brave/Chrome.
+2. In the **Cookie-Editor** extension, click **Export** $\rightarrow$ **Export as JSON**.
 3. Create/paste into `cookies.json` in the project root.
 *(Alternatively, run `npm run login:naukri` to sign in through the automated window).*
 
@@ -50,18 +60,37 @@ Place your resume as `Resume.pdf` in the project root directory.
 ```bash
 npm run apply:naukri
 ```
-- Automatically searches targeted entry-level roles (Software Engineer, Java, Spring Boot, Backend, Python, Data Analyst, GenAI).
+- Searches broad entry-level roles (Software Engineer, Java, Spring Boot, Python, Data Analyst, GenAI).
 - Skips external redirect jobs and filters out non-relevant listings.
 - Auto-fills recruiter chatbot questionnaires (0 experience, immediate notice, expected CTC).
-- Applies with humanized jitter delays (12–25 seconds) to keep your account safe.
+- Applies with humanized pacing delays (12–25 seconds) to keep your account safe.
 
 ---
 
-### Platform 2: Instahyre
+### 2. Wellfound (AngelList)
+
+#### Step A: Export Cookies (One-Time)
+1. Open your logged-in **Wellfound** tab (`https://wellfound.com/jobs`).
+2. In **Cookie-Editor**, click **Export** $\rightarrow$ **Export as JSON**.
+3. Create/paste into `cookies_wellfound.json` in the project root.
+*(Alternatively, run `npm run login:wellfound`).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:wellfound
+```
+- Scrapes active startup job listings for AI, Backend, Java, Python, and Data roles from your feed and saved searches.
+- Automatically handles the application modal.
+- Injects a personalized founder/recruiter pitch note highlighting your SPIT MCA degree, RAG/pgvector projects, and immediate availability.
+- Submits applications and records them in `data/applied_wellfound.json`.
+
+---
+
+### 3. Instahyre
 
 #### Step A: Export Cookies (One-Time)
 1. Open your logged-in **Instahyre** tab.
-2. Using Cookie-Editor, click **Export** $\rightarrow$ **Export as JSON**.
+2. In **Cookie-Editor**, click **Export** $\rightarrow$ **Export as JSON**.
 3. Create/paste into `cookies_instahyre.json` in the project root.
 *(Alternatively, run `npm run login:instahyre`).*
 
@@ -71,27 +100,7 @@ npm run apply:instahyre
 ```
 - Scrapes your curated opportunity feed on Instahyre.
 - Filters opportunities matching your whitelist keywords.
-- Injects a personalized recruiter pitch note highlighting your projects and immediate availability.
-- Submits applications and tracks status.
-
----
-
-### Platform 3: Wellfound (AngelList)
-
-#### Step A: Export Cookies (One-Time)
-1. In your Brave/Chrome browser, open your logged-in **Wellfound** tab (`https://wellfound.com/jobs`).
-2. Using **Cookie-Editor**, click **Export** $\rightarrow$ **Export as JSON**.
-3. Create/paste into `cookies_wellfound.json` in the project root.
-*(Alternatively, run `npm run login:wellfound`).*
-
-#### Step B: Run Applications
-```bash
-npm run apply:wellfound
-```
-- Scrapes active startup job listings for AI, Backend, Java, Python, and Data roles.
-- Filters listings against your whitelist and blacklist.
-- Injects a personalized founder/recruiter pitch note with your SPIT MCA & project credentials.
-- Submits applications and records them in `data/applied_wellfound.json`.
+- Injects a personalized recruiter pitch note and submits your interest.
 
 ---
 
@@ -114,7 +123,7 @@ queries: [
 ```
 
 ### Profile & Experience Answers
-Modify `config/profile.js` to adjust default answers for chatbot questions (CTC, Notice Period, Locations).
+Modify `config/profile.js` to adjust default answers for recruiter questionnaires (CTC, Notice Period, Locations, Skills).
 
 ### Safety Caps & Delays
 Modify `.env` to customize your application speed:
@@ -135,14 +144,19 @@ Auto-Applier/
 │   └── searchCriteria.js         # Queries, locations, title whitelist & blacklist
 ├── data/                         # Persistent deduplication storage
 │   ├── applied_jobs.json         # Naukri application history
+│   ├── applied_wellfound.json    # Wellfound application history
 │   └── applied_instahyre.json    # Instahyre application history
 ├── platforms/
-│   └── instahyre/
-│       └── instahyreService.js   # Instahyre scraper & recruiter pitch handler
+│   ├── instahyre/
+│   │   └── instahyreService.js   # Instahyre scraper & recruiter pitch handler
+│   └── wellfound/
+│       └── wellfoundService.js   # Wellfound job scraper & modal application handler
 ├── scripts/
 │   ├── bulkApply.js              # Naukri runner
+│   ├── bulkApplyWellfound.js     # Wellfound runner
 │   ├── bulkApplyInstahyre.js     # Instahyre runner
 │   ├── login.js                  # Naukri interactive login
+│   ├── loginWellfound.js         # Wellfound interactive login
 │   └── loginInstahyre.js         # Instahyre interactive login
 ├── services/
 │   ├── applyService.js           # Naukri apply lifecycle & modal handler
@@ -161,5 +175,5 @@ Auto-Applier/
 
 ## 🔒 Security & Privacy
 
-- All sensitive files (`cookies*.json`, `.env`, and `data/`) are strictly included in `.gitignore`.
-- No passwords or tokens are stored in the codebase.
+- All sensitive files (`cookies*.json`, `.env`, `data/`, and `Resume.pdf`) are strictly included in `.gitignore`.
+- No credentials or session tokens are stored in the codebase or version control.
