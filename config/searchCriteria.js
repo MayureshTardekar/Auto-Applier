@@ -85,8 +85,8 @@ const searchCriteria = {
     'seo',
   ],
 
-  // Job freshness filter in days (e.g., 3 days)
-  freshnessDays: 3,
+  // Job freshness filter in days (e.g., 14 days for broad active openings)
+  freshnessDays: 14,
 
   // Maximum experience to consider (years)
   maxExperienceYears: 1,
