@@ -86,6 +86,23 @@ class StorageService {
     this._saveJson(this.skippedFile, this.skippedJobs);
   }
 
+  /**
+   * Removes skipped entries matching the predicate so they are retried on the next run.
+   * @param {(entry: object) => boolean} shouldClear
+   * @returns {number} number of entries removed
+   */
+  clearSkipped(shouldClear) {
+    let removed = 0;
+    for (const [jobId, entry] of Object.entries(this.skippedJobs)) {
+      if (shouldClear(entry)) {
+        delete this.skippedJobs[jobId];
+        removed++;
+      }
+    }
+    if (removed > 0) this._saveJson(this.skippedFile, this.skippedJobs);
+    return removed;
+  }
+
   getTodayApplicationCount() {
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     return Object.values(this.appliedJobs).filter((entry) => {

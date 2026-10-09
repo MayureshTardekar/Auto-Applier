@@ -72,9 +72,13 @@ class BrowserService {
     });
 
     this.page = await this.browser.newPage();
+    await this.setupPage(this.page);
 
-    // Auto-dismiss or accept any native JavaScript alerts/dialogs to prevent hanging
-    this.page.on('dialog', async (dialog) => {
+    return { browser: this.browser, page: this.page };
+  }
+
+  async setupPage(page) {
+    page.on('dialog', async (dialog) => {
       try {
         logger.info(`Auto-handling native dialog: "${dialog.message()}"`);
         await dialog.accept();
@@ -83,17 +87,59 @@ class BrowserService {
       }
     });
 
-    // Standard modern Chrome User-Agent
-    await this.page.setUserAgent(
+    await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-    );
+    ).catch(() => {});
 
-    // Set standard request headers
-    await this.page.setExtraHTTPHeaders({
+    await page.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
-    });
+    }).catch(() => {});
 
-    return { browser: this.browser, page: this.page };
+    return page;
+  }
+
+  /**
+   * Ensures an active, healthy page is available.
+   * If the current page is closed or has a detached main frame,
+   * it cleanly discards the stale reference and creates/attaches a fresh page.
+   */
+  async getActivePage() {
+    if (!this.browser) {
+      throw new Error('Browser is not launched.');
+    }
+
+    const isHealthy = async (p) => {
+      if (!p || p.isClosed()) return false;
+      try {
+        await p.evaluate(() => 1);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (await isHealthy(this.page)) {
+      return this.page;
+    }
+
+    logger.warn('Current browser tab was detached, discarded, or closed. Recovering fresh active page...');
+    try {
+      const pages = await this.browser.pages();
+      for (const p of pages) {
+        if (await isHealthy(p)) {
+          this.page = p;
+          await this.page.bringToFront().catch(() => {});
+          return this.page;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    this.page = await this.browser.newPage();
+    await this.setupPage(this.page);
+    logger.success('Fresh browser page successfully initialized and attached.');
+    return this.page;
   }
 
   hasSavedSession(customCookiePath = null) {

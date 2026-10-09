@@ -3,6 +3,7 @@ const guardrails = require('../config/guardrails');
 const { randomDelay, humanScroll, humanMouseMove } = require('../utils/delay');
 const questionnaireHandler = require('./questionnaireHandler');
 const storageService = require('./storageService');
+const browserService = require('./browserService');
 
 class ApplyService {
   /**
@@ -13,6 +14,9 @@ class ApplyService {
    */
   async apply(page, job) {
     logger.info(`Navigating to job: "${job.title}" at ${job.company || 'Unknown'}`);
+
+    // Self-healing: ensure page is healthy and not detached
+    page = await browserService.getActivePage().catch(() => page);
 
     try {
       await page.goto(job.url, {
@@ -40,27 +44,8 @@ class ApplyService {
         return { status: 'SKIPPED', reason: 'already_applied' };
       }
 
-      // 2. Check if external redirect ("Apply on company site")
-      const isExternal = await page.evaluate(() => {
-        const externalButtons = Array.from(document.querySelectorAll('button, a'));
-        return externalButtons.some((el) => {
-          const text = (el.innerText || '').toLowerCase();
-          return (
-            text.includes('apply on company site') ||
-            text.includes('company site') ||
-            text.includes('apply on employer website')
-          );
-        });
-      });
-
-      if (isExternal) {
-        logger.skip('External company site application required (skipping)', job.title);
-        storageService.recordSkipped(job.jobId, job, 'external_site_redirect');
-        return { status: 'SKIPPED', reason: 'external_site_redirect' };
-      }
-
-      // 3. Locate Naukri native Apply Button
-      const applyBtnSelector = await page.evaluate(() => {
+      // 2. Locate Naukri Apply Button & check if native vs external
+      const applyBtnState = await page.evaluate(() => {
         const candidateSelectors = [
           '#apply-button',
           '.apply-button',
@@ -69,33 +54,56 @@ class ApplyService {
           'button[id*="apply"]',
         ];
 
+        let el = null;
         for (const selector of candidateSelectors) {
-          const el = document.querySelector(selector);
-          if (el && el.offsetParent !== null) return selector;
+          const found = document.querySelector(selector);
+          if (found && found.offsetParent !== null) {
+            el = found;
+            break;
+          }
         }
 
-        // Fallback by button text
-        const buttons = Array.from(document.querySelectorAll('button, a.btn'));
-        const matched = buttons.find((b) => {
-          const t = (b.innerText || '').trim().toLowerCase();
-          return t === 'apply' || t === 'apply on naukri' || t.startsWith('apply');
-        });
-
-        if (matched) {
-          matched.setAttribute('data-bot-apply-target', 'true');
-          return '[data-bot-apply-target="true"]';
+        // Fallback: look for button or prominent link specifically labelled with Apply
+        if (!el) {
+          const candidates = Array.from(document.querySelectorAll('button, a.btn, [role="button"]'));
+          el = candidates.find((b) => {
+            const t = (b.innerText || b.value || '').trim().toLowerCase();
+            return (
+              (t === 'apply' || t === 'apply on naukri' || t.startsWith('apply on ') || t.startsWith('apply now')) &&
+              b.offsetParent !== null
+            );
+          });
         }
 
-        return null;
+        if (!el) return { found: false };
+
+        const text = (el.innerText || el.value || el.textContent || '').trim().toLowerCase();
+        // Check if the apply action itself is an external redirect
+        const isExternal =
+          text.includes('apply on company site') ||
+          text.includes('apply on employer website') ||
+          text.includes('company site') ||
+          text.includes('employer site');
+
+        if (isExternal) return { found: true, isExternal: true };
+
+        el.setAttribute('data-bot-apply-target', 'true');
+        return { found: true, isExternal: false, selector: '[data-bot-apply-target="true"]' };
       });
 
-      if (!applyBtnSelector) {
+      if (!applyBtnState.found) {
         logger.warn(`No apply button located for: ${job.title}`);
         storageService.recordSkipped(job.jobId, job, 'no_apply_button_found');
         return { status: 'SKIPPED', reason: 'no_apply_button_found' };
       }
 
-      // 4. Click the Apply button safely via DOM (avoids protocolTimeout hangs)
+      if (applyBtnState.isExternal) {
+        logger.skip('External company site application required (skipping)', job.title);
+        storageService.recordSkipped(job.jobId, job, 'external_site_redirect');
+        return { status: 'SKIPPED', reason: 'external_site_redirect' };
+      }
+
+      // 3. Click the Apply button safely via DOM (avoids protocolTimeout hangs)
       logger.info('Clicking Apply button...');
       await page.evaluate((sel) => {
         const el = document.querySelector(sel);
@@ -103,7 +111,7 @@ class ApplyService {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           el.click();
         }
-      }, applyBtnSelector);
+      }, applyBtnState.selector);
       await randomDelay(2000, 3500);
 
       // 5. Delegate to Questionnaire and Chatbot handler if modal appears
@@ -136,6 +144,10 @@ class ApplyService {
         return { status: 'SKIPPED', reason: 'unconfirmed_submission' };
       }
     } catch (err) {
+      if (err.message.includes('detached Frame') || err.message.includes('Target closed') || err.message.includes('Session closed')) {
+        logger.warn(`Detached frame or closed target detected during "${job.title}". Recovering active page...`);
+        await browserService.getActivePage().catch(() => {});
+      }
       logger.error(`Application failed for: ${job.title}`, err);
       storageService.recordSkipped(job.jobId, job, `error: ${err.message}`);
       return { status: 'FAILED', reason: err.message };

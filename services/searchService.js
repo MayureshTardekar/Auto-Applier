@@ -2,6 +2,7 @@ const logger = require('../utils/logger');
 const guardrails = require('../config/guardrails');
 const searchCriteria = require('../config/searchCriteria');
 const storageService = require('./storageService');
+const browserService = require('./browserService');
 const { randomDelay, humanScroll } = require('../utils/delay');
 
 class SearchService {
@@ -33,6 +34,9 @@ class SearchService {
   async scrapeJobsOnPage(page, query, location, pageNum) {
     const url = this.buildSearchUrl(query, location, pageNum);
     logger.info(`Searching: "${query}" in "${location || 'All'}" (Page ${pageNum})`);
+
+    // Self-healing: ensure page is healthy and not detached
+    page = await browserService.getActivePage().catch(() => page);
 
     try {
       await page.goto(url, {
@@ -122,6 +126,10 @@ class SearchService {
       logger.info(`Qualified ${candidateJobs.length} fresh jobs matching filters.`);
       return candidateJobs;
     } catch (err) {
+      if (err.message.includes('detached Frame') || err.message.includes('Target closed') || err.message.includes('Session closed')) {
+        logger.warn(`Detached frame or closed target detected during search for "${query}". Recovering active page...`);
+        await browserService.getActivePage().catch(() => {});
+      }
       logger.error(`Error scraping search page ${pageNum} for "${query}"`, err);
       return [];
     }

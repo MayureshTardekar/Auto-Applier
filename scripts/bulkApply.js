@@ -71,7 +71,8 @@ async function main() {
         for (let pageNum = 1; pageNum <= guardrails.maxPagesPerQuery; pageNum++) {
           if (sessionAppliedCount >= maxSessionApplies) break outerLoop;
 
-          const candidateJobs = await searchService.scrapeJobsOnPage(page, query, location, pageNum);
+          const activePage = await browserService.getActivePage();
+          const candidateJobs = await searchService.scrapeJobsOnPage(activePage, query, location, pageNum);
 
           if (candidateJobs.length === 0) {
             logger.info(`No candidate jobs on page ${pageNum}, moving to next filter.`);
@@ -84,7 +85,8 @@ async function main() {
               break outerLoop;
             }
 
-            const result = await applyService.apply(page, job);
+            const currentActivePage = await browserService.getActivePage();
+            const result = await applyService.apply(currentActivePage, job);
 
             if (result.status === 'APPLIED') {
               sessionAppliedCount++;

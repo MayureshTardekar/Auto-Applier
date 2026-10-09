@@ -3,6 +3,7 @@ const profile = require('../../config/profile'); // loads dotenv
 const searchCriteria = require('../../config/searchCriteria');
 const logger = require('../../utils/logger');
 const storage = require('../../services/storageService').getStorage('indeed');
+const browserService = require('../../services/browserService');
 const { randomDelay, humanScroll, humanMouseMove } = require('../../utils/delay');
 
 const INDEED_CONFIG = Object.freeze({
@@ -125,6 +126,9 @@ class IndeedService {
     const url = this.buildSearchUrl(query, location, pageIndex);
     logger.info(`Searching Indeed: "${query}" in "${location || 'All'}" (Page ${pageIndex + 1})`);
 
+    // Self-healing: ensure page is healthy and not detached
+    page = await browserService.getActivePage().catch(() => page);
+
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: INDEED_CONFIG.navTimeoutMs });
       if (!(await this.waitForChallenge(page))) return [];
@@ -189,6 +193,10 @@ class IndeedService {
       logger.info(`Qualified ${qualified.length} Easily Apply jobs.`);
       return qualified;
     } catch (err) {
+      if (err.message.includes('detached Frame') || err.message.includes('Target closed') || err.message.includes('Session closed')) {
+        logger.warn(`Detached frame or closed target detected during Indeed search for "${query}". Recovering active page...`);
+        await browserService.getActivePage().catch(() => {});
+      }
       logger.error(`Error scraping Indeed page for "${query}"`, err);
       return [];
     }
@@ -562,6 +570,9 @@ class IndeedService {
     this.attemptedThisSession.add(job.jobId);
     let formPage = null;
 
+    // Self-healing: ensure page is healthy and not detached
+    page = await browserService.getActivePage().catch(() => page);
+
     try {
       // 1. If currently on search results, click card directly to load preview pane without full-page Cloudflare challenge
       const cardOnPage = await page.$(`a[data-jk="${job.jobId}"]`);
@@ -675,6 +686,10 @@ class IndeedService {
       this.markSkipped(job, result.reason);
       return { status: 'SKIPPED', reason: result.reason };
     } catch (err) {
+      if (err.message.includes('detached Frame') || err.message.includes('Target closed') || err.message.includes('Session closed')) {
+        logger.warn(`Detached frame or closed target detected during Indeed job "${job.title}". Recovering active page...`);
+        await browserService.getActivePage().catch(() => {});
+      }
       logger.error(`Indeed application failed for ${job.title}`, err);
       this.markSkipped(job, `error: ${err.message}`);
       return { status: 'FAILED', reason: err.message };

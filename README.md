@@ -1,6 +1,6 @@
 # Auto-Applier 🚀
 
-A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri**, **Wellfound (AngelList)**, and **Instahyre**.
+A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri**, **Wellfound (AngelList)**, **Indeed**, and **Instahyre**.
 
 ---
 
@@ -10,6 +10,7 @@ A modular, stealth-configured automation engine built with Node.js and Puppeteer
 | :--- | :--- | :--- | :--- |
 | **Naukri** | `npm run apply:naukri` *(or `npm run apply`)* | `npm run login:naukri` | `data/applied_jobs.json` |
 | **Wellfound** | `npm run apply:wellfound` | `npm run login:wellfound` | `data/applied_wellfound.json` |
+| **Indeed** | `npm run apply:indeed` | `npm run login:indeed` | `data/applied_indeed.json` |
 | **Instahyre** | `npm run apply:instahyre` | `npm run login:instahyre` | `data/applied_instahyre.json` |
 
 ---
@@ -36,8 +37,8 @@ Set your browser path and application preferences:
 ```env
 HEADLESS=false
 BROWSER_EXECUTABLE_PATH=C:\Users\YOUR_USERNAME\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe
-MAX_APPLIES_PER_RUN=35
-MAX_APPLIES_PER_DAY=50
+MAX_APPLIES_PER_RUN=100
+MAX_APPLIES_PER_DAY=100
 EXPECTED_CTC_LAKHS=9.5
 ```
 
@@ -86,7 +87,27 @@ npm run apply:wellfound
 
 ---
 
-### 3. Instahyre
+### 3. Indeed
+
+#### Step A: Export Cookies (One-Time)
+1. Open your logged-in **Indeed** tab (`https://in.indeed.com`).
+2. In **Cookie-Editor**, click **Export** $\rightarrow$ **Export as JSON**.
+3. Create/paste into `cookies_indeed.json` in the project root.
+*(Alternatively, run `npm run login:indeed` and sign in with Email + OTP; Google sign-in is usually blocked in automated browsers).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:indeed
+```
+- Searches only **Easily Apply** jobs (posted in the last 3 days) using your shared queries and locations.
+- Walks through Indeed's multi-step apply form and answers known screening questions (experience, notice, CTC, relocation).
+- If a required question can't be answered safely, it **skips the job instead of submitting wrong answers** (reason logged in `data/skipped_indeed.json`).
+- If Indeed shows a security check, solve it in the browser window; the bot waits up to 60s.
+- Optional: set `INDEED_BASE_URL` in `.env` (default `https://in.indeed.com`).
+
+---
+
+### 4. Instahyre
 
 #### Step A: Export Cookies (One-Time)
 1. Open your logged-in **Instahyre** tab.
@@ -127,8 +148,8 @@ Modify `config/profile.js` to adjust default answers for recruiter questionnaire
 
 ### Safety Caps & Delays
 Modify `.env` to customize your application speed:
-- `MAX_APPLIES_PER_RUN`: Applications per run (default: `35`)
-- `MAX_APPLIES_PER_DAY`: Daily safety cap (default: `50`)
+- `MAX_APPLIES_PER_RUN`: Applications per run (default: `100`)
+- `MAX_APPLIES_PER_DAY`: Daily safety cap per platform (default: `100`)
 - `INTER_APPLY_DELAY_MIN_MS`: Minimum delay between jobs (default: `12000`)
 - `INTER_APPLY_DELAY_MAX_MS`: Maximum delay between jobs (default: `25000`)
 
@@ -149,14 +170,18 @@ Auto-Applier/
 ├── platforms/
 │   ├── instahyre/
 │   │   └── instahyreService.js   # Instahyre scraper & recruiter pitch handler
+│   ├── indeed/
+│   │   └── indeedService.js      # Indeed Easily Apply search & multi-step form handler
 │   └── wellfound/
 │       └── wellfoundService.js   # Wellfound job scraper & modal application handler
 ├── scripts/
 │   ├── bulkApply.js              # Naukri runner
 │   ├── bulkApplyWellfound.js     # Wellfound runner
+│   ├── bulkApplyIndeed.js        # Indeed runner
 │   ├── bulkApplyInstahyre.js     # Instahyre runner
 │   ├── login.js                  # Naukri interactive login
 │   ├── loginWellfound.js         # Wellfound interactive login
+│   ├── loginIndeed.js            # Indeed interactive login
 │   └── loginInstahyre.js         # Instahyre interactive login
 ├── services/
 │   ├── applyService.js           # Naukri apply lifecycle & modal handler
