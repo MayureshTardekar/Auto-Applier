@@ -94,12 +94,14 @@ class ApplyService {
       if (!applyBtnState.found) {
         logger.warn(`No apply button located for: ${job.title}`);
         storageService.recordSkipped(job.jobId, job, 'no_apply_button_found');
+        storageService.recordManualApply(job, 'no_apply_button_found');
         return { status: 'SKIPPED', reason: 'no_apply_button_found' };
       }
 
       if (applyBtnState.isExternal) {
         logger.skip('External company site application required (skipping)', job.title);
         storageService.recordSkipped(job.jobId, job, 'external_site_redirect');
+        storageService.recordManualApply(job, 'external_site_redirect');
         return { status: 'SKIPPED', reason: 'external_site_redirect' };
       }
 
@@ -141,6 +143,7 @@ class ApplyService {
       } else {
         logger.warn(`Application status unconfirmed for: ${job.title}`);
         storageService.recordSkipped(job.jobId, job, 'unconfirmed_submission');
+        storageService.recordManualApply(job, 'unconfirmed_submission');
         return { status: 'SKIPPED', reason: 'unconfirmed_submission' };
       }
     } catch (err) {

@@ -24,6 +24,12 @@ const profile = {
     'Coimbatore',
     'Trivandrum',
     'Ahmedabad',
+    'Delhi',
+    'New Delhi',
+    'Noida',
+    'Gurgaon',
+    'Gurugram',
+    'Kolkata',
   ],
 
   education: {

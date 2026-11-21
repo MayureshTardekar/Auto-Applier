@@ -9,7 +9,7 @@ class SearchService {
   buildSearchUrl(query, location = '', pageNum = 1) {
     const slug = query.trim().replace(/\s+/g, '-').toLowerCase();
     const encodedQuery = encodeURIComponent(query);
-    let url = `https://www.naukri.com/${slug}-jobs-${pageNum}?k=${encodedQuery}&experience=0`;
+    let url = `https://www.naukri.com/${slug}-jobs-${pageNum}?k=${encodedQuery}&experience=0&jobAge=${searchCriteria.freshnessDays}`;
 
     if (location) {
       url += `&l=${encodeURIComponent(location)}`;
@@ -19,16 +19,61 @@ class SearchService {
     return url;
   }
 
-  isTitleRelevant(title) {
-    const lower = title.toLowerCase();
+  escapeRegex(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
-    // 1. Blacklist check
-    const hasBlacklistedToken = searchCriteria.titleBlacklist.some((bad) => lower.includes(bad));
-    if (hasBlacklistedToken) return false;
+  /**
+   * Token match that respects word boundaries, so short tokens like "hr" or
+   * "bi" do not match inside words such as "Thrive" or "Mobile".
+   */
+  hasToken(text, token) {
+    const escaped = this.escapeRegex(String(token).trim());
+    if (!escaped) return false;
+    const re = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, 'i');
+    return re.test(text);
+  }
+
+  isTitleRelevant(title) {
+    const lower = String(title || '').toLowerCase();
+
+    // 1. Blacklist check (word-boundary aware)
+    if (searchCriteria.titleBlacklist.some((bad) => this.hasToken(lower, bad))) return false;
 
     // 2. Whitelist check
-    const hasWhitelistedToken = searchCriteria.titleWhitelist.some((good) => lower.includes(good));
-    return hasWhitelistedToken;
+    return searchCriteria.titleWhitelist.some((good) => this.hasToken(lower, good));
+  }
+
+  isCompanyBlacklisted(company) {
+    const lower = String(company || '').toLowerCase();
+    if (!lower) return false;
+    return (searchCriteria.companyBlacklist || []).some((bad) => lower.includes(bad));
+  }
+
+  /**
+   * Returns the minimum years required by an experience string such as
+   * "0-1 Yrs", "2-5 Yrs", "Fresher". null = unknown (do not filter).
+   */
+  parseMinExperienceYears(text) {
+    const lower = String(text || '').toLowerCase();
+    if (!lower.trim() || lower.includes('fresher')) return 0;
+    const nums = lower.match(/\d+(?:\.\d+)?/g);
+    if (!nums) return null;
+    return Math.min(...nums.map(Number));
+  }
+
+  /** Converts a posting-age string ("3 days ago", "2 weeks ago") to days. */
+  parsePostedDaysAgo(text) {
+    const lower = String(text || '').toLowerCase();
+    if (!lower.trim()) return null;
+    if (lower.includes('today') || lower.includes('just now') || /\b\d+\s*hour/.test(lower)) return 0;
+    const day = lower.match(/(\d+)\s*day/);
+    if (day) return Number(day[1]);
+    const week = lower.match(/(\d+)\s*week/);
+    if (week) return Number(week[1]) * 7;
+    const month = lower.match(/(\d+)\s*month/);
+    if (month) return Number(month[1]) * 30;
+    return null;
   }
 
   async scrapeJobsOnPage(page, query, location, pageNum) {
@@ -58,6 +103,7 @@ class SearchService {
           const companyEl = card.querySelector('a.comp-name, .comp-name, .org');
           const locEl = card.querySelector('.loc-wrap, .loc, .location');
           const expEl = card.querySelector('.exp-wrap, .exp');
+          const postedEl = card.querySelector('.job-post-day, .job-postdate, .posted-date, [class*="postDay"]');
 
           if (titleEl && titleEl.href) {
             cards.push({
@@ -66,6 +112,7 @@ class SearchService {
               company: (companyEl?.innerText || '').trim(),
               location: (locEl?.innerText || '').trim(),
               experience: (expEl?.innerText || '').trim(),
+              posted: (postedEl?.innerText || '').trim(),
             });
           }
         });
@@ -110,6 +157,28 @@ class SearchService {
         if (!this.isTitleRelevant(card.title)) {
           logger.skip('Title filtered out by keyword rules', card.title);
           storageService.recordSkipped(jobId, card, 'title_filter_mismatch');
+          continue;
+        }
+
+        if (this.isCompanyBlacklisted(card.company)) {
+          logger.skip('Company blacklisted (staffing/consultancy)', `${card.title} @ ${card.company}`);
+          storageService.recordSkipped(jobId, card, 'company_blacklisted');
+          continue;
+        }
+
+        // Skip jobs that require more experience than configured
+        const minExp = this.parseMinExperienceYears(card.experience);
+        if (minExp !== null && minExp > searchCriteria.maxExperienceYears) {
+          logger.skip(`Requires ${minExp}+ yrs experience`, card.title);
+          storageService.recordSkipped(jobId, card, 'experience_too_high');
+          continue;
+        }
+
+        // Skip stale listings if a posting age is available on the card
+        const postedDays = this.parsePostedDaysAgo(card.posted);
+        if (postedDays !== null && postedDays > searchCriteria.freshnessDays) {
+          logger.skip(`Stale listing (${postedDays} days old)`, card.title);
+          storageService.recordSkipped(jobId, card, 'stale_listing');
           continue;
         }
 

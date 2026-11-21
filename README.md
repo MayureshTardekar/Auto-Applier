@@ -1,6 +1,6 @@
 # Auto-Applier 🚀
 
-A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri**, **Wellfound (AngelList)**, **Indeed**, and **Instahyre**.
+A modular, stealth-configured automation engine built with Node.js and Puppeteer to find, filter, and bulk-apply to tech roles across **Naukri**, **Wellfound (AngelList)**, **Indeed**, **Instahyre**, **Foundit**, **Internshala**, and **TimesJobs**.
 
 ---
 
@@ -12,6 +12,9 @@ A modular, stealth-configured automation engine built with Node.js and Puppeteer
 | **Wellfound** | `npm run apply:wellfound` | `npm run login:wellfound` | `data/applied_wellfound.json` |
 | **Indeed** | `npm run apply:indeed` | `npm run login:indeed` | `data/applied_indeed.json` |
 | **Instahyre** | `npm run apply:instahyre` | `npm run login:instahyre` | `data/applied_instahyre.json` |
+| **Foundit** | `npm run apply:foundit` | `npm run login:foundit` | `data/applied_foundit.json` |
+| **Internshala** | `npm run apply:internshala` | `npm run login:internshala` | `data/applied_internshala.json` |
+| **TimesJobs** | `npm run apply:timesjobs` | `npm run login:timesjobs` | `data/applied_timesjobs.json` |
 
 ---
 
@@ -37,8 +40,8 @@ Set your browser path and application preferences:
 ```env
 HEADLESS=false
 BROWSER_EXECUTABLE_PATH=C:\Users\YOUR_USERNAME\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe
-MAX_APPLIES_PER_RUN=100
-MAX_APPLIES_PER_DAY=100
+MAX_APPLIES_PER_RUN=30
+MAX_APPLIES_PER_DAY=30
 EXPECTED_CTC_LAKHS=9.5
 ```
 
@@ -125,6 +128,74 @@ npm run apply:instahyre
 
 ---
 
+### 5. Foundit (formerly Monster India)
+
+#### Step A: Export Cookies (One-Time)
+1. Open your logged-in **Foundit** tab.
+2. In **Cookie-Editor**, click **Export** → **Export as JSON**.
+3. Create/paste into `cookies_foundit.json` in the project root.
+*(Alternatively, run `npm run login:foundit`).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:foundit
+```
+- Rotates through your search keywords, filters title/company/experience/freshness/location, and applies.
+- If the apply flow redirects to the employer site, the job is queued in `data/manual_apply_foundit.txt`.
+- ⚠️ Foundit uses Akamai bot protection. If you see **"Access Denied"**, the session cannot proceed — try a different network or apply manually.
+
+---
+
+### 6. Internshala
+
+#### Step A: Export Cookies (One-Time)
+1. Open your logged-in **Internshala** tab (`https://internshala.com/`).
+2. In **Cookie-Editor**, click **Export** → **Export as JSON**.
+3. Create/paste into `cookies_internshala.json` in the project root.
+*(Alternatively, run `npm run login:internshala`).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:internshala
+```
+- Searches both **internships** and **fresher jobs** for every keyword.
+- Filters by title/company/location/freshness.
+- Fills the cover letter, answers simple Yes/No questions, and submits the easy-apply form.
+- Keep your Internshala resume and profile complete before running.
+
+---
+
+### 7. TimesJobs
+
+#### Step A: Export Cookies (One-Time)
+1. Open your logged-in **TimesJobs** tab (`https://www.timesjobs.com/`).
+2. In **Cookie-Editor**, click **Export** → **Export as JSON**.
+3. Create/paste into `cookies_timesjobs.json` in the project root.
+*(Alternatively, run `npm run login:timesjobs`).*
+
+#### Step B: Run Applications
+```bash
+npm run apply:timesjobs
+```
+- Uses TimesJobs' quoted keyword search and paginates through results.
+- TimesJobs often redirects applications to the **company website**, so those jobs are captured with the employer's apply URL in `data/manual_apply_timesjobs.txt`.
+- Native apply forms are filled and submitted automatically when available.
+
+---
+
+## 📋 Tracking & Manual Queue
+
+```bash
+npm run report                                    # exports every platform to data/applications.csv
+npm run manual:list                               # prints the Naukri manual-apply queue
+npm run manual:list -- --platform=timesjobs       # any platform: foundit, internshala, ...
+npm run reset:skipped -- --platform=foundit       # retry retry-able skipped jobs
+npm run reset:skipped -- --platform=foundit --all # retry every skipped job
+```
+Manual-apply queue files follow `data/manual_apply_<platform>.txt` (Naukri uses `data/manual_apply.txt`). Keyword rotation progress is stored per platform in `data/rotation_<platform>.json`.
+
+---
+
 ## 🛠️ Customization Guide
 
 ### Targeted Roles & Keywords
@@ -148,10 +219,16 @@ Modify `config/profile.js` to adjust default answers for recruiter questionnaire
 
 ### Safety Caps & Delays
 Modify `.env` to customize your application speed:
-- `MAX_APPLIES_PER_RUN`: Applications per run (default: `100`)
-- `MAX_APPLIES_PER_DAY`: Daily safety cap per platform (default: `100`)
-- `INTER_APPLY_DELAY_MIN_MS`: Minimum delay between jobs (default: `12000`)
-- `INTER_APPLY_DELAY_MAX_MS`: Maximum delay between jobs (default: `25000`)
+- `MAX_APPLIES_PER_RUN`: Applications per run (default: `15`)
+- `MAX_APPLIES_PER_DAY`: Daily safety cap per platform (default: `30`)
+- `MAX_APPLIES_PER_QUERY`: Cap per search keyword so one query cannot use the whole run (default: `5`)
+- `MAX_CANDIDATES_PER_RUN`: Max qualified jobs scraped per run (default: `120`)
+- `MAX_SKIPS_PER_RUN`: Stop after this many skipped jobs (default: `60`)
+- `MAX_RUN_MINUTES`: Hard time budget per run (default: `120`)
+- `INTER_APPLY_DELAY_MIN_MS`: Minimum delay between jobs (default: `15000`)
+- `INTER_APPLY_DELAY_MAX_MS`: Maximum delay between jobs (default: `30000`)
+
+For a fresher mass-apply push, raise the run/day caps gradually and keep the delays at **15–30s** or higher; aggressive settings increase the chance of account flags.
 
 ---
 
@@ -166,23 +243,45 @@ Auto-Applier/
 ├── data/                         # Persistent deduplication storage
 │   ├── applied_jobs.json         # Naukri application history
 │   ├── applied_wellfound.json    # Wellfound application history
-│   └── applied_instahyre.json    # Instahyre application history
+│   ├── applied_indeed.json       # Indeed application history
+│   ├── applied_instahyre.json    # Instahyre application history
+│   ├── applied_foundit.json      # Foundit application history
+│   ├── applied_internshala.json  # Internshala application history
+│   └── applied_timesjobs.json    # TimesJobs application history
 ├── platforms/
-│   ├── instahyre/
-│   │   └── instahyreService.js   # Instahyre scraper & recruiter pitch handler
+│   ├── foundit/
+│   │   └── founditService.js     # Foundit scraper & apply handler
 │   ├── indeed/
 │   │   └── indeedService.js      # Indeed Easily Apply search & multi-step form handler
+│   ├── instahyre/
+│   │   └── instahyreService.js   # Instahyre scraper & recruiter pitch handler
+│   ├── internshala/
+│   │   └── internshalaService.js # Internshala internship/job scraper & easy-apply handler
+│   ├── shared/
+│   │   └── runPlatform.js        # Shared caps, pacing, session-check runner
+│   ├── timesjobs/
+│   │   └── timesjobsService.js   # TimesJobs paginated search & apply handler
 │   └── wellfound/
 │       └── wellfoundService.js   # Wellfound job scraper & modal application handler
 ├── scripts/
 │   ├── bulkApply.js              # Naukri runner
-│   ├── bulkApplyWellfound.js     # Wellfound runner
+│   ├── bulkApplyFoundit.js       # Foundit runner
 │   ├── bulkApplyIndeed.js        # Indeed runner
 │   ├── bulkApplyInstahyre.js     # Instahyre runner
+│   ├── bulkApplyInternshala.js   # Internshala runner
+│   ├── bulkApplyTimesJobs.js     # TimesJobs runner
+│   ├── bulkApplyWellfound.js     # Wellfound runner
+│   ├── lib/interactiveLogin.js   # Shared interactive login helper
+│   ├── listManualQueue.js        # Print jobs queued for manual apply
 │   ├── login.js                  # Naukri interactive login
-│   ├── loginWellfound.js         # Wellfound interactive login
+│   ├── loginFoundit.js           # Foundit interactive login
 │   ├── loginIndeed.js            # Indeed interactive login
-│   └── loginInstahyre.js         # Instahyre interactive login
+│   ├── loginInstahyre.js         # Instahyre interactive login
+│   ├── loginInternshala.js       # Internshala interactive login
+│   ├── loginTimesJobs.js         # TimesJobs interactive login
+│   ├── loginWellfound.js         # Wellfound interactive login
+│   ├── report.js                 # Export all applications to CSV
+│   └── resetSkipped.js           # Retry skipped jobs
 ├── services/
 │   ├── applyService.js           # Naukri apply lifecycle & modal handler
 │   ├── browserService.js         # Puppeteer Stealth engine & cookie manager
@@ -191,7 +290,9 @@ Auto-Applier/
 │   └── storageService.js         # Multi-platform partitioned deduplication
 ├── utils/
 │   ├── delay.js                  # Jitter delays & human emulation
-│   └── logger.js                 # Leveled colored console output
+│   ├── jobFilters.js             # Shared title/company/experience/freshness filters
+│   ├── logger.js                 # Leveled colored console output
+│   └── rotation.js               # Per-platform keyword rotation state
 ├── package.json                  # NPM multi-platform scripts
 └── index.js                      # Universal CLI dispatcher
 ```

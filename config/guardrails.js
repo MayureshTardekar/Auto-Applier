@@ -5,6 +5,16 @@ const guardrails = {
   maxAppliesPerRun: parseInt(process.env.MAX_APPLIES_PER_RUN, 10) || 15,
   maxAppliesPerDay: parseInt(process.env.MAX_APPLIES_PER_DAY, 10) || 30,
 
+  // Per-query cap so one broad query cannot consume the whole run quota
+  maxAppliesPerQuery: parseInt(process.env.MAX_APPLIES_PER_QUERY, 10) || 5,
+
+  // Max qualified jobs to scrape before applying (search-based platforms)
+  maxCandidatesPerRun: parseInt(process.env.MAX_CANDIDATES_PER_RUN, 10) || 120,
+
+  // Stop early if a run burns too long on unapplicable jobs (external sites etc.)
+  maxSkipsPerRun: parseInt(process.env.MAX_SKIPS_PER_RUN, 10) || 60,
+  maxRunMinutes: parseInt(process.env.MAX_RUN_MINUTES, 10) || 120,
+
   // Human-like inter-apply delays (avoids rate limiting and velocity detection)
   interApplyDelayMinMs: parseInt(process.env.INTER_APPLY_DELAY_MIN_MS, 10) || 15000,
   interApplyDelayMaxMs: parseInt(process.env.INTER_APPLY_DELAY_MAX_MS, 10) || 30000,

@@ -11,13 +11,20 @@
 const storageService = require('../services/storageService');
 const logger = require('../utils/logger');
 
-const KEEP_REASONS = new Set(['external_apply', 'title_filter_mismatch']);
+const KEEP_REASONS = new Set([
+  'external_site_redirect',
+  'title_filter_mismatch',
+  'company_blacklisted',
+  'experience_too_high',
+  'stale_listing',
+]);
 
 const args = process.argv.slice(2);
 const platformArg = args.find((a) => a.startsWith('--platform='));
 const platform = platformArg ? platformArg.split('=')[1].toLowerCase() : null;
 const reasonArg = args.find((a) => a.startsWith('--reason='));
 const targetReason = reasonArg ? reasonArg.split('=')[1] : null;
+const clearAll = args.includes('--all');
 
 if (!platform) {
   logger.error('Missing --platform. Example: node scripts/resetSkipped.js --platform=naukri');

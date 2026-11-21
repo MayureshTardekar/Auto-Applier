@@ -86,6 +86,41 @@ class StorageService {
     this._saveJson(this.skippedFile, this.skippedJobs);
   }
 
+  _manualApplyFile() {
+    if (this.platform === 'naukri') return path.join(DATA_DIR, 'manual_apply.txt');
+    return path.join(DATA_DIR, `manual_apply_${this.platform}.txt`);
+  }
+
+  /**
+   * Appends a skipped-but-actionable job to a human-readable .txt queue so it can
+   * be applied to manually later. Deduplicates by URL.
+   */
+  recordManualApply(jobDetails, reason) {
+    try {
+      const file = this._manualApplyFile();
+      const url = jobDetails.url || '';
+      const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+
+      if (url && existing.includes(url)) return; // already queued
+
+      let prefix = '';
+      if (!existing) {
+        prefix =
+          '# Manual Apply Queue - jobs the bot skipped; apply to these yourself.\n' +
+          '# date | title | company | reason | url\n';
+      }
+
+      const line =
+        `${new Date().toISOString()} | ${jobDetails.title || 'Unknown'} | ` +
+        `${jobDetails.company || 'Unknown'} | ${reason} | ${url}\n`;
+
+      fs.appendFileSync(file, prefix + line, 'utf8');
+      logger.warn(`Queued for manual apply: ${jobDetails.title} -> ${path.basename(file)}`);
+    } catch (err) {
+      logger.error('Failed to write manual apply queue', err);
+    }
+  }
+
   /**
    * Removes skipped entries matching the predicate so they are retried on the next run.
    * @param {(entry: object) => boolean} shouldClear
